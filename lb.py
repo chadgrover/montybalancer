@@ -2,15 +2,14 @@ import os
 import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-host_name = os.environ.get('LB_HOST_NAME', 'localhost')
-port = int(os.environ.get('LB_PORT', 8001))
-
-be_host_name = os.environ.get('BE_HOST_NAME', 'localhost')
-be_port = int(os.environ.get('BE_PORT', 8080))
+LB_HOST_NAME = os.environ.get('LB_HOST_NAME', 'localhost')
+LB_PORT = int(os.environ.get('LB_PORT', 8000))
+BE_HOST_NAME = os.environ.get('BE_HOST_NAME', 'localhost')
+BE_PORT = int(os.environ.get('BE_PORT', 8081))
 
 class MontyBalancer(BaseHTTPRequestHandler):
     def do_GET(self):
-        response = requests.get(f"http://{be_host_name}:{be_port}")
+        response = requests.get("http://%s:%s" % (BE_HOST_NAME, BE_PORT))
 
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
@@ -29,8 +28,8 @@ class MontyBalancer(BaseHTTPRequestHandler):
         return
 
 if __name__ == '__main__':
-    web_server = HTTPServer((host_name, port), MontyBalancer)
-    print(f"MontyBalancer started at http://%s:%s" % (host_name, port))
+    web_server = HTTPServer((LB_HOST_NAME, LB_PORT), MontyBalancer)
+    print(f"MontyBalancer has started at http://%s:%s" % (LB_HOST_NAME, LB_PORT))
 
     try:
         web_server.serve_forever()
