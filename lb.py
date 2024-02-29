@@ -3,13 +3,34 @@ import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 LB_HOST_NAME = os.environ.get('LB_HOST_NAME', 'localhost')
-LB_PORT = int(os.environ.get('LB_PORT', 8000))
+LB_PORT = int(os.environ.get('LB_PORT', 8001))
+
 BE_HOST_NAME = os.environ.get('BE_HOST_NAME', 'localhost')
-BE_PORT = int(os.environ.get('BE_PORT', 8081))
+BE_PORTS = [int(port) for port in os.environ.get('BE_PORTS').split(' ')]
+
+current_server = None
 
 class MontyBalancer(BaseHTTPRequestHandler):
+    @staticmethod
+    def round_robin(servers_list):
+        cached_servers_list = servers_list
+        i = 0
+
+        def increment_and_return_next_server():
+            # Allows i to be modified in the closure
+            nonlocal i
+
+            result = cached_servers_list[i]
+            i = (i + 1) % len(cached_servers_list)
+
+            return result
+        
+        return increment_and_return_next_server
+
     def do_GET(self):
-        response = requests.get("http://%s:%s" % (BE_HOST_NAME, BE_PORT))
+        current_port = current_server()
+        
+        response = requests.get("http://%s:%s" % (BE_HOST_NAME, current_port))
 
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
@@ -23,11 +44,12 @@ class MontyBalancer(BaseHTTPRequestHandler):
         level_5 = f"Accept: {self.headers['Accept']}"
 
         print(f"./lb\n{level_1}\n{level_2}\n{level_3}\n{level_4}\n{level_5}")
-        print(f"Response from Backend Server: {response.status_code}")
+        print(f"Response from server running at {response.url}\nStatus Code: {response.status_code}")
 
         return
 
 if __name__ == '__main__':
+    current_server = MontyBalancer.round_robin(BE_PORTS)
     web_server = HTTPServer((LB_HOST_NAME, LB_PORT), MontyBalancer)
     print(f"MontyBalancer has started at http://%s:%s" % (LB_HOST_NAME, LB_PORT))
 
