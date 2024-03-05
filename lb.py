@@ -9,7 +9,7 @@ BE_HOST_NAME = os.environ.get('BE_HOST_NAME', 'localhost')
 BE_PORTS = os.environ.get('BE_PORTS').split(' ')
 SERVERS_LIST = [int(port) for port in BE_PORTS]
 
-current_server = None
+round_robin_functions = {}
 HTTPServer.allow_reuse_address = True
 
 class MontyBalancer(BaseHTTPRequestHandler):
@@ -20,7 +20,7 @@ class MontyBalancer(BaseHTTPRequestHandler):
         cached_servers_list = servers_list
         i = 0
 
-        def increment_and_return_next_server():
+        def next_server():
             # Allows i to be modified in the closure
             nonlocal i
 
@@ -29,12 +29,53 @@ class MontyBalancer(BaseHTTPRequestHandler):
 
             return result
         
-        return increment_and_return_next_server
+        def add_server(server):
+            cached_servers_list.append(server)
+
+        def remove_server(server):
+            cached_servers_list.remove(server)
+        
+        return next_server, add_server, remove_server
+    
+    def do_POST(self):
+        # Add a server with good health back to the list
+
+        content_length = int(self.headers['Content-Length'])
+        body = self.rfile.read(content_length).decode('utf-8')
+        port_to_add = int(body.split('=')[1])
+
+        round_robin_functions['add_server'](port_to_add)
+
+        self.protocol_version = "HTTP/1.1"
+        self.send_response(201)
+        self.end_headers()
+
+        print(f"Server running at port {port_to_add} has been added to the list.")
+
+        return
+    
+    def do_DELETE(self):
+        # Delete a server with bad health from the list
+
+        content_length = int(self.headers['Content-Length'])
+        body = self.rfile.read(content_length).decode('utf-8')
+        port_to_remove = int(body.split('=')[1])
+
+        round_robin_functions['remove_server'](port_to_remove)
+
+        self.protocol_version = "HTTP/1.1"
+        self.send_response(200)
+        self.end_headers()
+
+        print(f"Server running at port {port_to_remove} has been removed from the list.")
+
+        return
+        
 
     def do_GET(self):
-        current_port = current_server()
+        next_server = round_robin_functions['next_server']()
         
-        response = requests.get("http://%s:%s" % (BE_HOST_NAME, current_port))
+        response = requests.get("http://%s:%s" % (BE_HOST_NAME, next_server))
 
         self.protocol_version = "HTTP/1.1"
         self.send_response(200)
@@ -53,7 +94,7 @@ class MontyBalancer(BaseHTTPRequestHandler):
         return
 
 if __name__ == '__main__':
-    current_server = MontyBalancer.round_robin(SERVERS_LIST)
+    round_robin_functions['next_server'], round_robin_functions['add_server'], round_robin_functions['remove_server'] = MontyBalancer.round_robin(SERVERS_LIST)
     web_server = HTTPServer((LB_HOST_NAME, LB_PORT), MontyBalancer)
     print(f"MontyBalancer has started at http://%s:%s" % (LB_HOST_NAME, LB_PORT))
 
@@ -69,3 +110,5 @@ if __name__ == '__main__':
     web_server.server_close()
 
     print("MontyBalancer stopped.")
+
+    
