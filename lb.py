@@ -6,7 +6,8 @@ LB_HOST_NAME = os.environ.get('LB_HOST_NAME', 'localhost')
 LB_PORT = int(os.environ.get('LB_PORT', 8001))
 
 BE_HOST_NAME = os.environ.get('BE_HOST_NAME', 'localhost')
-BE_PORTS = [int(port) for port in os.environ.get('BE_PORTS').split(' ')] if os.environ.get('BE_PORTS') is list else [int(os.environ.get('BE_PORTS'))]
+BE_PORTS = os.environ.get('BE_PORTS').split(' ')
+SERVERS_LIST = [int(port) for port in BE_PORTS]
 
 current_server = None
 HTTPServer.allow_reuse_address = True
@@ -17,7 +18,6 @@ class MontyBalancer(BaseHTTPRequestHandler):
     @staticmethod
     def round_robin(servers_list):
         cached_servers_list = servers_list
-        print(cached_servers_list)
         i = 0
 
         def increment_and_return_next_server():
@@ -53,16 +53,19 @@ class MontyBalancer(BaseHTTPRequestHandler):
         return
 
 if __name__ == '__main__':
-    current_server = MontyBalancer.round_robin(BE_PORTS)
+    current_server = MontyBalancer.round_robin(SERVERS_LIST)
     web_server = HTTPServer((LB_HOST_NAME, LB_PORT), MontyBalancer)
-    web_server.allow_reuse_address = True
     print(f"MontyBalancer has started at http://%s:%s" % (LB_HOST_NAME, LB_PORT))
 
     try:
         web_server.serve_forever()
     except KeyboardInterrupt:
-        pass
+        print("\nShutting down...\n")
+    except Exception as e:
+        print("Error:\n")
+        print(e)
 
+    web_server.shutdown()
     web_server.server_close()
 
     print("MontyBalancer stopped.")
